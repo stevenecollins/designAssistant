@@ -93,3 +93,73 @@ User types message → useClaudeChat.sendMessage()
 6. "Change the rectangle color to red" → rectangle fill updates
 7. "Delete the rectangle" → rectangle is removed
 8. All created nodes should be real Figma objects (selectable, editable, visible in layers panel)
+
+---
+
+# Phase 3: React Prototype Export
+
+## Tasks
+
+- [x] Create `plugin/src/tools/export.ts` — frame data + image export handlers (sandbox, ES2017)
+- [x] Wire export handlers into `plugin/src/code.ts`
+- [x] Add frame tracking to `plugin/src/ui/hooks/useClaudeChat.ts` + expose `executeToolInSandbox`
+- [x] Install JSZip dependency
+- [x] Create `plugin/src/codegen/prompt.ts` — code generation prompt builder
+- [x] Create `plugin/src/codegen/scaffold.ts` — Vite project template files
+- [x] Create `plugin/src/ui/hooks/usePrototypeExport.ts` — export orchestration hook
+- [x] Create `plugin/src/ui/components/PrototypePanel.tsx` — prototype UI component
+- [x] Modify `plugin/src/ui/App.tsx` — integrate PrototypePanel
+- [x] Modify `proxy/worker.ts` — accept configurable max_tokens
+- [x] Build and verify — builds successfully with no errors
+
+## Review
+
+### Changes Made
+
+**plugin/src/tools/export.ts** (new) — Two sandbox export functions. `exportFrameData` deep-serializes a frame's node tree (fills, strokes, text content, fonts, auto-layout, corner radius, opacity) using a recursive `serializeNodeDetailed` with depth limit of 20. `exportFrameImage` calls `exportAsync` to render the frame as a 2x PNG, converts the Uint8Array to base64 using an ES2017-safe chunked `String.fromCharCode` approach.
+
+**plugin/src/code.ts** — Added `export_frame_data` and `export_frame_image` cases to the tool-call switch. These are internal sandbox commands (not Claude-facing tools) called by the UI via the existing `callId` message pattern.
+
+**plugin/src/ui/hooks/useClaudeChat.ts** — Added `trackedFrameIdsRef` (Set) and `trackedFrameIds` (state) to track frame IDs created via `create_frame` tools during conversation. After each tool result, checks if the tool was `create_frame` and adds the ID to the set. Exposed `trackedFrameIds` and `executeToolInSandbox` from the hook return.
+
+**plugin/src/codegen/prompt.ts** (new) — Builds the Claude prompt for code generation. System prompt instructs Claude to generate React + Tailwind components with React Router routing, outputting files as a JSON array. User message includes frame JSON data, PNG screenshots as base64 image content blocks, and conversation summary.
+
+**plugin/src/codegen/scaffold.ts** (new) — Returns static Vite + React + Tailwind project template files: package.json, vite.config.ts, tsconfig.json, index.html, src/main.tsx, and src/index.css. Uses Tailwind v4 with @tailwindcss/vite plugin.
+
+**plugin/src/ui/hooks/usePrototypeExport.ts** (new) — Orchestration hook with state machine (idle → exporting-frames → generating-code → bundling → done/error). Exports frame data/images from sandbox, sends to Claude for code generation with 16384 max tokens, parses the generated files JSON from the response, combines with scaffold files, and bundles into a zip via JSZip for download.
+
+**plugin/src/ui/components/PrototypePanel.tsx** (new) — UI component showing: "Create Prototype (N frames)" button when idle with tracked frames, spinner with status message during export, green "Download Prototype" link when done, error message with retry when failed.
+
+**plugin/src/ui/App.tsx** — Integrated PrototypePanel between page context badge and message list. Wired up `trackedFrameIds` from useClaudeChat and export state from usePrototypeExport.
+
+**proxy/worker.ts** — Accepts optional `max_tokens` field in request body (capped at 16384). Falls back to 4096 if not provided. 2-line change.
+
+### Architecture
+
+```
+Designer clicks "Create Prototype"
+  → usePrototypeExport.createPrototype(frameIds)
+  → For each frame:
+      → executeToolInSandbox("export_frame_data") → sandbox serializes node tree
+      → executeToolInSandbox("export_frame_image") → sandbox renders PNG
+  → buildCodeGenPrompt(frames, conversationSummary)
+  → POST to proxy (max_tokens: 16384, stream: false)
+  → Proxy relays to Claude → Claude generates React + Tailwind code
+  → parseGeneratedFiles(responseText) → extract JSON files array
+  → JSZip: scaffold files + generated files → blob
+  → Download link appears → designer downloads zip
+  → Unzip, npm install, npm run dev → browser opens prototype
+```
+
+### Testing Instructions
+
+1. Start proxy: `cd proxy && npx wrangler dev`
+2. Build plugin: `cd plugin && npm run build`
+3. Run plugin in Figma
+4. Ask Claude to create 2-3 screen designs (e.g., "Create a login page" then "Create a dashboard page")
+5. The "Create Prototype" button appears after frames are created
+6. Click "Create Prototype" — observe progress states (Exporting frames... → Generating code... → Bundling...)
+7. Click "Download Prototype" when the green button appears
+8. Unzip the downloaded file
+9. `cd design-prototype && npm install && npm run dev`
+10. Browser opens — verify pages render with styling, navigation works between pages

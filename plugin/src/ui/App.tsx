@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { ChatMessage } from "./components/ChatMessage";
 import { useClaudeChat } from "./hooks/useClaudeChat";
+import { PrototypePanel } from "./components/PrototypePanel";
+import { usePrototypeExport } from "./hooks/usePrototypeExport";
 
 interface PageInfo {
   name: string;
@@ -12,7 +14,8 @@ interface PageInfo {
 function App() {
   const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
   const [inputText, setInputText] = useState("");
-  const { messages, isLoading, sendMessage } = useClaudeChat();
+  const { messages, isLoading, sendMessage, trackedFrameIds, executeToolInSandbox } = useClaudeChat();
+  const { exportState, errorMessage, downloadUrl, createPrototype, reset } = usePrototypeExport(executeToolInSandbox, messages);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,6 +53,16 @@ function App() {
           <span>Loading...</span>
         )}
       </div>
+
+      {/* Prototype export panel */}
+      <PrototypePanel
+        frameCount={trackedFrameIds.length}
+        exportState={exportState}
+        errorMessage={errorMessage}
+        downloadUrl={downloadUrl}
+        onCreatePrototype={() => createPrototype(trackedFrameIds)}
+        onReset={reset}
+      />
 
       {/* Message list */}
       <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>

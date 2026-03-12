@@ -43,9 +43,10 @@ var worker_default = {
       );
     }
     const useStream = body.stream !== void 0 ? body.stream : true;
+    const maxTokens = Math.min(body.max_tokens || 4096, 16384);
     const anthropicBody = {
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       stream: useStream,
       messages: body.messages
     };

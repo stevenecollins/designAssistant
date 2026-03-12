@@ -29,6 +29,9 @@ export function useClaudeChat() {
   const pendingToolCallsRef = useRef<Map<string, (result: unknown) => void>>(new Map());
   // Full API message history (content block arrays for tool-use)
   const apiMessagesRef = useRef<Array<{ role: string; content: unknown }>>([]);
+  // Track frame IDs created during the conversation
+  const trackedFrameIdsRef = useRef<Set<string>>(new Set());
+  const [trackedFrameIds, setTrackedFrameIds] = useState<string[]>([]);
 
   // Listen for messages from the sandbox
   useEffect(() => {
@@ -181,6 +184,11 @@ Selected nodes: ${JSON.stringify(context.selectedNodes)}`;
               (toolBlock as any).name,
               (toolBlock as any).input
             );
+            // Track frames created during conversation
+            if ((toolBlock as any).name === "create_frame" && result && (result as any).id) {
+              trackedFrameIdsRef.current.add((result as any).id);
+              setTrackedFrameIds(Array.from(trackedFrameIdsRef.current));
+            }
             toolResults.push({
               type: "tool_result",
               tool_use_id: (toolBlock as any).id,
@@ -214,5 +222,5 @@ Selected nodes: ${JSON.stringify(context.selectedNodes)}`;
     }
   }, []);
 
-  return { messages, isLoading, sendMessage };
+  return { messages, isLoading, sendMessage, trackedFrameIds, executeToolInSandbox };
 }

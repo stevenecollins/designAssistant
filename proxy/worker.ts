@@ -41,7 +41,7 @@ export default {
     }
 
     // Parse request body
-    let body: { messages: Array<{ role: string; content: unknown }>; system?: string; tools?: unknown[]; stream?: boolean };
+    let body: { messages: Array<{ role: string; content: unknown }>; system?: string; tools?: unknown[]; stream?: boolean; max_tokens?: number };
     try {
       body = await request.json();
     } catch {
@@ -60,9 +60,10 @@ export default {
 
     // Forward to Anthropic API
     const useStream = body.stream !== undefined ? body.stream : true;
+    const maxTokens = Math.min(body.max_tokens || 4096, 16384);
     const anthropicBody: Record<string, unknown> = {
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       stream: useStream,
       messages: body.messages,
     };

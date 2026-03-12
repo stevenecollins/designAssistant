@@ -4,6 +4,7 @@
 
 import { getDocumentStructure, getNodeProperties, getSelection } from "./tools/read";
 import { createFrame, createText, createRectangle, updateNode, deleteNode, moveNode } from "./tools/write";
+import { exportFrameData, exportFrameImage } from "./tools/export";
 
 figma.showUI(__html__, {
   width: 400,
@@ -96,6 +97,12 @@ figma.ui.onmessage = async (msg: { type: string; payload?: unknown }) => {
               break;
             case "move_node":
               result = moveNode(toolArgs);
+              break;
+            case "export_frame_data":
+              result = exportFrameData(toolArgs);
+              break;
+            case "export_frame_image":
+              result = await exportFrameImage(toolArgs);
               break;
             default:
               result = { error: "Unknown tool: " + toolName };
