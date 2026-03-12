@@ -32,10 +32,70 @@ export default {
       return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
     }
 
-    // Relay to Anthropic API (to be implemented in Phase 1)
-    return new Response(
-      JSON.stringify({ message: "Proxy ready. Claude API relay coming in Phase 1." }),
-      { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
-    );
+    // Validate API key
+    if (!env.ANTHROPIC_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }),
+        { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Parse request body
+    let body: { messages: Array<{ role: string; content: string }>; system?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body" }),
+        { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!body.messages || !Array.isArray(body.messages)) {
+      return new Response(
+        JSON.stringify({ error: "messages array is required" }),
+        { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Forward to Anthropic API with streaming
+    const anthropicBody: Record<string, unknown> = {
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      stream: true,
+      messages: body.messages,
+    };
+    if (body.system) {
+      anthropicBody.system = body.system;
+    }
+
+    const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(anthropicBody),
+    });
+
+    // If Anthropic returns an error, forward it
+    if (!anthropicResponse.ok) {
+      const errorText = await anthropicResponse.text();
+      return new Response(
+        JSON.stringify({ error: "Anthropic API error", status: anthropicResponse.status, detail: errorText }),
+        { status: anthropicResponse.status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Pipe the SSE stream back to the client
+    return new Response(anthropicResponse.body, {
+      status: 200,
+      headers: {
+        ...CORS_HEADERS,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+      },
+    });
   },
 };

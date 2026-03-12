@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
+import { ChatMessage } from "./components/ChatMessage";
+import { useClaudeChat } from "./hooks/useClaudeChat";
 
 interface PageInfo {
   name: string;
@@ -9,52 +11,101 @@ interface PageInfo {
 
 function App() {
   const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
+  const [inputText, setInputText] = useState("");
+  const { messages, isLoading, sendMessage } = useClaudeChat();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Listen for messages from the plugin sandbox
     const handleMessage = (event: MessageEvent) => {
       const msg = event.data.pluginMessage;
       if (!msg) return;
-
-      switch (msg.type) {
-        case "page-info":
-          setPageInfo(msg.payload);
-          break;
+      if (msg.type === "page-info") {
+        setPageInfo(msg.payload);
       }
     };
 
     window.addEventListener("message", handleMessage);
-
-    // Request page info on mount
     parent.postMessage({ pluginMessage: { type: "get-page-info" } }, "*");
-
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = () => {
+    const trimmed = inputText.trim();
+    if (!trimmed || isLoading) return;
+    setInputText("");
+    sendMessage(trimmed);
+  };
+
   return (
-    <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600 }}>Design Assistant</h2>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      {/* Page context badge */}
+      <div style={{ padding: "8px 16px", borderBottom: "1px solid #eee", fontSize: 12, color: "#666" }}>
+        {pageInfo ? (
+          <span>Page: <strong>{pageInfo.name}</strong> &middot; {pageInfo.childCount} elements</span>
+        ) : (
+          <span>Loading...</span>
+        )}
+      </div>
 
-      {pageInfo ? (
-        <div style={{ fontSize: 12, color: "#666" }}>
-          <p>Page: <strong>{pageInfo.name}</strong></p>
-          <p>Elements: {pageInfo.childCount}</p>
-        </div>
-      ) : (
-        <p style={{ fontSize: 12, color: "#999" }}>Loading...</p>
-      )}
+      {/* Message list */}
+      <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+        {messages.length === 0 && (
+          <div style={{ textAlign: "center", color: "#999", fontSize: 12, marginTop: 32 }}>
+            Ask me anything about your design.
+          </div>
+        )}
+        {messages.map((msg, i) => (
+          <ChatMessage key={i} role={msg.role} content={msg.content} />
+        ))}
+        {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
+          <div style={{ color: "#999", fontSize: 12, padding: 8 }}>Claude is thinking...</div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
 
-      <div
-        style={{
-          padding: 12,
-          background: "#f5f5f5",
-          borderRadius: 8,
-          fontSize: 12,
-          color: "#666",
-          textAlign: "center",
-        }}
-      >
-        Chat interface coming in Phase 1
+      {/* Input area */}
+      <div style={{ padding: "8px 12px", borderTop: "1px solid #eee", display: "flex", gap: 8 }}>
+        <textarea
+          style={{
+            flex: 1,
+            resize: "none",
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            padding: "8px 12px",
+            fontSize: 13,
+            fontFamily: "inherit",
+            outline: "none",
+          }}
+          rows={1}
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          placeholder="Ask about your design..."
+        />
+        <button
+          style={{
+            background: isLoading || !inputText.trim() ? "#ccc" : "#0D6EFD",
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            padding: "8px 16px",
+            cursor: isLoading || !inputText.trim() ? "default" : "pointer",
+            fontSize: 13,
+          }}
+          onClick={handleSend}
+          disabled={isLoading || !inputText.trim()}
+        >
+          Send
+        </button>
       </div>
     </div>
   );

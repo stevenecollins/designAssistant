@@ -1110,7 +1110,7 @@
             }
             return dispatcher.useContext(Context);
           }
-          function useState2(initialState) {
+          function useState3(initialState) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useState(initialState);
           }
@@ -1118,11 +1118,11 @@
             var dispatcher = resolveDispatcher();
             return dispatcher.useReducer(reducer, initialArg, init);
           }
-          function useRef(initialValue) {
+          function useRef3(initialValue) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useRef(initialValue);
           }
-          function useEffect2(create, deps) {
+          function useEffect3(create, deps) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useEffect(create, deps);
           }
@@ -1134,7 +1134,7 @@
             var dispatcher = resolveDispatcher();
             return dispatcher.useLayoutEffect(create, deps);
           }
-          function useCallback(callback, deps) {
+          function useCallback2(callback, deps) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useCallback(callback, deps);
           }
@@ -1901,19 +1901,19 @@
           exports.memo = memo;
           exports.startTransition = startTransition;
           exports.unstable_act = act;
-          exports.useCallback = useCallback;
+          exports.useCallback = useCallback2;
           exports.useContext = useContext;
           exports.useDebugValue = useDebugValue;
           exports.useDeferredValue = useDeferredValue;
-          exports.useEffect = useEffect2;
+          exports.useEffect = useEffect3;
           exports.useId = useId;
           exports.useImperativeHandle = useImperativeHandle;
           exports.useInsertionEffect = useInsertionEffect;
           exports.useLayoutEffect = useLayoutEffect;
           exports.useMemo = useMemo;
           exports.useReducer = useReducer;
-          exports.useRef = useRef;
-          exports.useState = useState2;
+          exports.useRef = useRef3;
+          exports.useState = useState3;
           exports.useSyncExternalStore = useSyncExternalStore;
           exports.useTransition = useTransition;
           exports.version = ReactVersion;
@@ -24490,10 +24490,10 @@
               return jsxWithValidation(type, props, key, false);
             }
           }
-          var jsx2 = jsxWithValidationDynamic;
+          var jsx3 = jsxWithValidationDynamic;
           var jsxs2 = jsxWithValidationStatic;
           exports.Fragment = REACT_FRAGMENT_TYPE;
-          exports.jsx = jsx2;
+          exports.jsx = jsx3;
           exports.jsxs = jsxs2;
         })();
       }
@@ -24513,57 +24513,221 @@
   });
 
   // src/ui/App.tsx
-  var import_react = __toESM(require_react());
+  var import_react2 = __toESM(require_react());
   var import_client = __toESM(require_client());
+
+  // src/ui/components/ChatMessage.tsx
   var import_jsx_runtime = __toESM(require_jsx_runtime());
-  function App() {
-    const [pageInfo, setPageInfo] = (0, import_react.useState)(null);
+  function ChatMessage({ role, content }) {
+    const isUser = role === "user";
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "div",
+      {
+        style: {
+          maxWidth: "80%",
+          padding: "8px 12px",
+          borderRadius: isUser ? "12px 12px 0 12px" : "12px 12px 12px 0",
+          background: isUser ? "#0D6EFD" : "#F0F0F0",
+          color: isUser ? "#fff" : "#333",
+          fontSize: 13,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word"
+        },
+        children: content
+      }
+    ) });
+  }
+
+  // src/ui/hooks/useClaudeChat.ts
+  var import_react = __toESM(require_react());
+  var PROXY_URL = "http://localhost:8787";
+  function useClaudeChat() {
+    const [messages, setMessages] = (0, import_react.useState)([]);
+    const [isLoading, setIsLoading] = (0, import_react.useState)(false);
+    const contextResolverRef = (0, import_react.useRef)(null);
     (0, import_react.useEffect)(() => {
       const handleMessage = (event) => {
         const msg = event.data.pluginMessage;
         if (!msg) return;
-        switch (msg.type) {
-          case "page-info":
-            setPageInfo(msg.payload);
-            break;
+        if (msg.type === "context" && contextResolverRef.current) {
+          contextResolverRef.current(msg.payload);
+          contextResolverRef.current = null;
+        }
+      };
+      window.addEventListener("message", handleMessage);
+      return () => window.removeEventListener("message", handleMessage);
+    }, []);
+    function requestContext() {
+      return new Promise((resolve) => {
+        contextResolverRef.current = resolve;
+        parent.postMessage({ pluginMessage: { type: "get-context" } }, "*");
+      });
+    }
+    const sendMessage = (0, import_react.useCallback)(async (text) => {
+      const userMessage = { role: "user", content: text };
+      setMessages((prev) => {
+        const updated = [...prev, userMessage];
+        doSend(updated);
+        return updated;
+      });
+      async function doSend(updatedMessages) {
+        setIsLoading(true);
+        try {
+          const context = await requestContext();
+          const systemPrompt = `You are a Figma design assistant. You help designers create and modify designs.
+You are currently viewing a Figma file. Here is the current page context:
+Page: ${context.pageName}
+Top-level layers: ${JSON.stringify(context.topLevelNodes)}
+Selected nodes: ${JSON.stringify(context.selectedNodes)}`;
+          const response = await fetch(PROXY_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: updatedMessages, system: systemPrompt })
+          });
+          if (!response.ok) {
+            const errorText = await response.text();
+            setMessages([...updatedMessages, { role: "assistant", content: `Error: ${errorText}` }]);
+            return;
+          }
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let assistantContent = "";
+          let buffer = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop();
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              const data = line.slice(6);
+              if (data === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.type === "content_block_delta" && parsed.delta && parsed.delta.type === "text_delta") {
+                  assistantContent += parsed.delta.text;
+                  setMessages([
+                    ...updatedMessages,
+                    { role: "assistant", content: assistantContent }
+                  ]);
+                }
+              } catch {
+              }
+            }
+          }
+          if (!assistantContent) {
+            setMessages([
+              ...updatedMessages,
+              { role: "assistant", content: "No response received." }
+            ]);
+          }
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : "Unknown error";
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: `Error: ${errorMsg}` }
+          ]);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    }, []);
+    return { messages, isLoading, sendMessage };
+  }
+
+  // src/ui/App.tsx
+  var import_jsx_runtime2 = __toESM(require_jsx_runtime());
+  function App() {
+    const [pageInfo, setPageInfo] = (0, import_react2.useState)(null);
+    const [inputText, setInputText] = (0, import_react2.useState)("");
+    const { messages, isLoading, sendMessage } = useClaudeChat();
+    const messagesEndRef = (0, import_react2.useRef)(null);
+    (0, import_react2.useEffect)(() => {
+      const handleMessage = (event) => {
+        const msg = event.data.pluginMessage;
+        if (!msg) return;
+        if (msg.type === "page-info") {
+          setPageInfo(msg.payload);
         }
       };
       window.addEventListener("message", handleMessage);
       parent.postMessage({ pluginMessage: { type: "get-page-info" } }, "*");
       return () => window.removeEventListener("message", handleMessage);
     }, []);
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 16, display: "flex", flexDirection: "column", gap: 12 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { style: { fontSize: 16, fontWeight: 600 }, children: "Design Assistant" }),
-      pageInfo ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: "#666" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [
-          "Page: ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: pageInfo.name })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [
-          "Elements: ",
-          pageInfo.childCount
-        ] })
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { style: { fontSize: 12, color: "#999" }, children: "Loading..." }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "div",
-        {
-          style: {
-            padding: 12,
-            background: "#f5f5f5",
-            borderRadius: 8,
-            fontSize: 12,
-            color: "#666",
-            textAlign: "center"
-          },
-          children: "Chat interface coming in Phase 1"
-        }
-      )
+    (0, import_react2.useEffect)(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+    const handleSend = () => {
+      const trimmed = inputText.trim();
+      if (!trimmed || isLoading) return;
+      setInputText("");
+      sendMessage(trimmed);
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { style: { height: "100vh", display: "flex", flexDirection: "column" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { style: { padding: "8px 16px", borderBottom: "1px solid #eee", fontSize: 12, color: "#666" }, children: pageInfo ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { children: [
+        "Page: ",
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: pageInfo.name }),
+        " \xB7 ",
+        pageInfo.childCount,
+        " elements"
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: "Loading..." }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { style: { flex: 1, overflowY: "auto", padding: 16 }, children: [
+        messages.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { style: { textAlign: "center", color: "#999", fontSize: 12, marginTop: 32 }, children: "Ask me anything about your design." }),
+        messages.map((msg, i) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ChatMessage, { role: msg.role, content: msg.content }, i)),
+        isLoading && messages[messages.length - 1]?.role !== "assistant" && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { style: { color: "#999", fontSize: 12, padding: 8 }, children: "Claude is thinking..." }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { ref: messagesEndRef })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { style: { padding: "8px 12px", borderTop: "1px solid #eee", display: "flex", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+          "textarea",
+          {
+            style: {
+              flex: 1,
+              resize: "none",
+              border: "1px solid #ddd",
+              borderRadius: 8,
+              padding: "8px 12px",
+              fontSize: 13,
+              fontFamily: "inherit",
+              outline: "none"
+            },
+            rows: 1,
+            value: inputText,
+            onChange: (e) => setInputText(e.target.value),
+            onKeyDown: (e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            },
+            placeholder: "Ask about your design..."
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+          "button",
+          {
+            style: {
+              background: isLoading || !inputText.trim() ? "#ccc" : "#0D6EFD",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "8px 16px",
+              cursor: isLoading || !inputText.trim() ? "default" : "pointer",
+              fontSize: 13
+            },
+            onClick: handleSend,
+            disabled: isLoading || !inputText.trim(),
+            children: "Send"
+          }
+        )
+      ] })
     ] });
   }
   var container = document.getElementById("root");
   if (container) {
     const root = (0, import_client.createRoot)(container);
-    root.render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}));
+    root.render(/* @__PURE__ */ (0, import_jsx_runtime2.jsx)(App, {}));
   }
 })();
 /*! Bundled license information:

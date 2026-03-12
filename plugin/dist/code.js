@@ -24,6 +24,27 @@
         });
         break;
       }
+      case "get-context": {
+        const page = figma.currentPage;
+        const selection = figma.currentPage.selection;
+        figma.ui.postMessage({
+          type: "context",
+          payload: {
+            pageName: page.name,
+            topLevelNodes: page.children.map((node) => ({
+              id: node.id,
+              name: node.name,
+              type: node.type
+            })),
+            selectedNodes: selection.map((node) => ({
+              id: node.id,
+              name: node.name,
+              type: node.type
+            }))
+          }
+        });
+        break;
+      }
       case "notify": {
         const payload = msg.payload;
         const text = payload && payload.message ? payload.message : "";
