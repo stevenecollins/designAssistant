@@ -1,0 +1,6 @@
+name = "design-assistant-proxy"
+main = "worker.ts"
+compatibility_date = "2024-12-01"
+
+# To set the API key secret, run:
+# npx wrangler secret put ANTHROPIC_API_KEY
