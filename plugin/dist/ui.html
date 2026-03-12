@@ -24540,11 +24540,240 @@
 
   // src/ui/hooks/useClaudeChat.ts
   var import_react = __toESM(require_react());
+
+  // src/tools/definitions.ts
+  var TOOL_DEFINITIONS = [
+    // ── Reading tools ──
+    {
+      name: "get_document_structure",
+      description: "Returns the node tree of the current Figma page, including names, types, positions, and sizes. Use this to understand what exists on the page before making changes.",
+      input_schema: {
+        type: "object",
+        properties: {},
+        required: []
+      }
+    },
+    {
+      name: "get_node_properties",
+      description: "Returns detailed properties of a specific node by ID, including fills, strokes, text content, font info, effects, and constraints.",
+      input_schema: {
+        type: "object",
+        properties: {
+          node_id: {
+            type: "string",
+            description: "The ID of the node to inspect"
+          }
+        },
+        required: ["node_id"]
+      }
+    },
+    {
+      name: "get_selection",
+      description: "Returns the currently selected nodes in Figma. Use this when the user says 'this', 'these', or 'the selected element'.",
+      input_schema: {
+        type: "object",
+        properties: {},
+        required: []
+      }
+    },
+    // ── Creation tools ──
+    {
+      name: "create_frame",
+      description: "Creates a new frame (container) on the current page. Frames can contain other elements and support auto-layout.",
+      input_schema: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Name for the frame" },
+          x: { type: "number", description: "X position" },
+          y: { type: "number", description: "Y position" },
+          width: { type: "number", description: "Width in pixels" },
+          height: { type: "number", description: "Height in pixels" },
+          fills: {
+            type: "array",
+            description: "Array of fill colors, e.g. [{r: 1, g: 0, b: 0}] for red. Values 0-1.",
+            items: {
+              type: "object",
+              properties: {
+                r: { type: "number" },
+                g: { type: "number" },
+                b: { type: "number" }
+              }
+            }
+          },
+          auto_layout: {
+            type: "object",
+            description: "Auto-layout settings",
+            properties: {
+              direction: {
+                type: "string",
+                enum: ["HORIZONTAL", "VERTICAL"]
+              },
+              spacing: { type: "number", description: "Gap between items" },
+              padding: { type: "number", description: "Padding on all sides" }
+            }
+          }
+        },
+        required: ["name", "x", "y", "width", "height"]
+      }
+    },
+    {
+      name: "create_text",
+      description: "Creates a text node on the current page. Always loads the font before setting text.",
+      input_schema: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "The text content" },
+          x: { type: "number", description: "X position" },
+          y: { type: "number", description: "Y position" },
+          font_size: { type: "number", description: "Font size in pixels" },
+          font_family: {
+            type: "string",
+            description: "Font family name, defaults to 'Inter'"
+          },
+          font_weight: {
+            type: "string",
+            description: "Font weight/style, e.g. 'Regular', 'Bold', 'Medium'. Defaults to 'Regular'"
+          },
+          color: {
+            type: "object",
+            description: "Text color as {r, g, b} with values 0-1",
+            properties: {
+              r: { type: "number" },
+              g: { type: "number" },
+              b: { type: "number" }
+            }
+          }
+        },
+        required: ["text", "x", "y", "font_size"]
+      }
+    },
+    {
+      name: "create_rectangle",
+      description: "Creates a rectangle on the current page.",
+      input_schema: {
+        type: "object",
+        properties: {
+          x: { type: "number", description: "X position" },
+          y: { type: "number", description: "Y position" },
+          width: { type: "number", description: "Width in pixels" },
+          height: { type: "number", description: "Height in pixels" },
+          fills: {
+            type: "array",
+            description: "Array of fill colors, e.g. [{r: 0, g: 0, b: 1}] for blue. Values 0-1.",
+            items: {
+              type: "object",
+              properties: {
+                r: { type: "number" },
+                g: { type: "number" },
+                b: { type: "number" }
+              }
+            }
+          },
+          corner_radius: {
+            type: "number",
+            description: "Corner radius for rounded rectangles"
+          },
+          name: { type: "string", description: "Name for the rectangle" }
+        },
+        required: ["x", "y", "width", "height"]
+      }
+    },
+    // ── Modification tools ──
+    {
+      name: "update_node",
+      description: "Updates properties of an existing node. Only provide the fields you want to change.",
+      input_schema: {
+        type: "object",
+        properties: {
+          node_id: { type: "string", description: "The ID of the node to update" },
+          name: { type: "string", description: "New name for the node" },
+          x: { type: "number", description: "New X position" },
+          y: { type: "number", description: "New Y position" },
+          width: { type: "number", description: "New width" },
+          height: { type: "number", description: "New height" },
+          fills: {
+            type: "array",
+            description: "New fill colors as [{r, g, b}] with values 0-1",
+            items: {
+              type: "object",
+              properties: {
+                r: { type: "number" },
+                g: { type: "number" },
+                b: { type: "number" }
+              }
+            }
+          },
+          text: {
+            type: "string",
+            description: "New text content (only for text nodes)"
+          },
+          font_size: {
+            type: "number",
+            description: "New font size (only for text nodes)"
+          },
+          visible: { type: "boolean", description: "Show or hide the node" },
+          opacity: {
+            type: "number",
+            description: "Opacity from 0 to 1"
+          },
+          corner_radius: {
+            type: "number",
+            description: "Corner radius for rectangles/frames"
+          }
+        },
+        required: ["node_id"]
+      }
+    },
+    {
+      name: "delete_node",
+      description: "Deletes a node from the document by its ID.",
+      input_schema: {
+        type: "object",
+        properties: {
+          node_id: {
+            type: "string",
+            description: "The ID of the node to delete"
+          }
+        },
+        required: ["node_id"]
+      }
+    },
+    {
+      name: "move_node",
+      description: "Moves a node to a new position, or reparents it under a different frame.",
+      input_schema: {
+        type: "object",
+        properties: {
+          node_id: {
+            type: "string",
+            description: "The ID of the node to move"
+          },
+          x: { type: "number", description: "New X position" },
+          y: { type: "number", description: "New Y position" },
+          parent_id: {
+            type: "string",
+            description: "ID of the new parent frame. If provided, the node is reparented."
+          }
+        },
+        required: ["node_id"]
+      }
+    }
+  ];
+
+  // src/ui/hooks/useClaudeChat.ts
   var PROXY_URL = "http://localhost:8787";
+  var MAX_TOOL_ROUNDS = 10;
+  var callIdCounter = 0;
+  function nextCallId() {
+    callIdCounter++;
+    return "tc_" + callIdCounter + "_" + Date.now();
+  }
   function useClaudeChat() {
     const [messages, setMessages] = (0, import_react.useState)([]);
     const [isLoading, setIsLoading] = (0, import_react.useState)(false);
     const contextResolverRef = (0, import_react.useRef)(null);
+    const pendingToolCallsRef = (0, import_react.useRef)(/* @__PURE__ */ new Map());
+    const apiMessagesRef = (0, import_react.useRef)([]);
     (0, import_react.useEffect)(() => {
       const handleMessage = (event) => {
         const msg = event.data.pluginMessage;
@@ -24552,6 +24781,17 @@
         if (msg.type === "context" && contextResolverRef.current) {
           contextResolverRef.current(msg.payload);
           contextResolverRef.current = null;
+        }
+        if (msg.type === "tool-result") {
+          const resolver = pendingToolCallsRef.current.get(msg.callId);
+          if (resolver) {
+            pendingToolCallsRef.current.delete(msg.callId);
+            if (msg.error) {
+              resolver({ error: msg.error });
+            } else {
+              resolver(msg.result);
+            }
+          }
         }
       };
       window.addEventListener("message", handleMessage);
@@ -24563,6 +24803,38 @@
         parent.postMessage({ pluginMessage: { type: "get-context" } }, "*");
       });
     }
+    function executeToolInSandbox(toolName, args) {
+      return new Promise((resolve) => {
+        const callId = nextCallId();
+        pendingToolCallsRef.current.set(callId, resolve);
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "tool-call",
+              payload: { callId, toolName, args }
+            }
+          },
+          "*"
+        );
+      });
+    }
+    async function callClaude(apiMessages, systemPrompt) {
+      const response = await fetch(PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: apiMessages,
+          system: systemPrompt,
+          tools: TOOL_DEFINITIONS,
+          stream: false
+        })
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error("API error: " + errorText);
+      }
+      return await response.json();
+    }
     const sendMessage = (0, import_react.useCallback)(async (text) => {
       const userMessage = { role: "user", content: text };
       setMessages((prev) => {
@@ -24570,63 +24842,73 @@
         doSend(updated);
         return updated;
       });
-      async function doSend(updatedMessages) {
+      async function doSend(displayMessages) {
         setIsLoading(true);
         try {
           const context = await requestContext();
           const systemPrompt = `You are a Figma design assistant. You help designers create and modify designs.
-You are currently viewing a Figma file. Here is the current page context:
+You have tools to read the document, create elements, and modify existing ones.
+Use tools to fulfill the user's design requests. After making changes, briefly confirm what you did.
+
+Current page context:
 Page: ${context.pageName}
 Top-level layers: ${JSON.stringify(context.topLevelNodes)}
 Selected nodes: ${JSON.stringify(context.selectedNodes)}`;
-          const response = await fetch(PROXY_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ messages: updatedMessages, system: systemPrompt })
-          });
-          if (!response.ok) {
-            const errorText = await response.text();
-            setMessages([...updatedMessages, { role: "assistant", content: `Error: ${errorText}` }]);
-            return;
-          }
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let assistantContent = "";
-          let buffer = "";
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop();
-            for (const line of lines) {
-              if (!line.startsWith("data: ")) continue;
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.type === "content_block_delta" && parsed.delta && parsed.delta.type === "text_delta") {
-                  assistantContent += parsed.delta.text;
-                  setMessages([
-                    ...updatedMessages,
-                    { role: "assistant", content: assistantContent }
-                  ]);
-                }
-              } catch {
-              }
+          apiMessagesRef.current.push({ role: "user", content: text });
+          let rounds = 0;
+          while (rounds < MAX_TOOL_ROUNDS) {
+            rounds++;
+            const response = await callClaude(apiMessagesRef.current, systemPrompt);
+            const contentBlocks = Array.isArray(response.content) ? response.content : [];
+            apiMessagesRef.current.push({ role: "assistant", content: contentBlocks });
+            const toolUseBlocks = contentBlocks.filter(
+              (block) => block.type === "tool_use"
+            );
+            if (response.stop_reason === "end_turn" || toolUseBlocks.length === 0) {
+              const textParts = contentBlocks.filter((block) => block.type === "text").map((block) => block.text);
+              const finalText = textParts.join("\n") || "Done.";
+              setMessages([
+                ...displayMessages,
+                { role: "assistant", content: finalText }
+              ]);
+              break;
             }
-          }
-          if (!assistantContent) {
+            const toolNames = toolUseBlocks.map((b) => b.name).join(", ");
             setMessages([
-              ...updatedMessages,
-              { role: "assistant", content: "No response received." }
+              ...displayMessages,
+              {
+                role: "assistant",
+                content: "Working: " + toolNames + "..."
+              }
+            ]);
+            const toolResults = [];
+            for (const toolBlock of toolUseBlocks) {
+              const result = await executeToolInSandbox(
+                toolBlock.name,
+                toolBlock.input
+              );
+              toolResults.push({
+                type: "tool_result",
+                tool_use_id: toolBlock.id,
+                content: JSON.stringify(result)
+              });
+            }
+            apiMessagesRef.current.push({ role: "user", content: toolResults });
+          }
+          if (rounds >= MAX_TOOL_ROUNDS) {
+            setMessages([
+              ...displayMessages,
+              {
+                role: "assistant",
+                content: "I've reached the maximum number of tool calls. Here's what I've done so far."
+              }
             ]);
           }
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : "Unknown error";
           setMessages((prev) => [
             ...prev,
-            { role: "assistant", content: `Error: ${errorMsg}` }
+            { role: "assistant", content: "Error: " + errorMsg }
           ]);
         } finally {
           setIsLoading(false);

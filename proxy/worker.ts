@@ -41,7 +41,7 @@ export default {
     }
 
     // Parse request body
-    let body: { messages: Array<{ role: string; content: string }>; system?: string };
+    let body: { messages: Array<{ role: string; content: unknown }>; system?: string; tools?: unknown[]; stream?: boolean };
     try {
       body = await request.json();
     } catch {
@@ -58,15 +58,19 @@ export default {
       );
     }
 
-    // Forward to Anthropic API with streaming
+    // Forward to Anthropic API
+    const useStream = body.stream !== undefined ? body.stream : true;
     const anthropicBody: Record<string, unknown> = {
       model: "claude-sonnet-4-20250514",
       max_tokens: 4096,
-      stream: true,
+      stream: useStream,
       messages: body.messages,
     };
     if (body.system) {
       anthropicBody.system = body.system;
+    }
+    if (body.tools) {
+      anthropicBody.tools = body.tools;
     }
 
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
@@ -88,12 +92,12 @@ export default {
       );
     }
 
-    // Pipe the SSE stream back to the client
+    // Pipe the response back to the client
     return new Response(anthropicResponse.body, {
       status: 200,
       headers: {
         ...CORS_HEADERS,
-        "Content-Type": "text/event-stream",
+        "Content-Type": useStream ? "text/event-stream" : "application/json",
         "Cache-Control": "no-cache",
       },
     });

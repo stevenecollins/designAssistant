@@ -42,14 +42,18 @@ var worker_default = {
         { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
       );
     }
+    const useStream = body.stream !== void 0 ? body.stream : true;
     const anthropicBody = {
       model: "claude-sonnet-4-20250514",
       max_tokens: 4096,
-      stream: true,
+      stream: useStream,
       messages: body.messages
     };
     if (body.system) {
       anthropicBody.system = body.system;
+    }
+    if (body.tools) {
+      anthropicBody.tools = body.tools;
     }
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -71,7 +75,7 @@ var worker_default = {
       status: 200,
       headers: {
         ...CORS_HEADERS,
-        "Content-Type": "text/event-stream",
+        "Content-Type": useStream ? "text/event-stream" : "application/json",
         "Cache-Control": "no-cache"
       }
     });

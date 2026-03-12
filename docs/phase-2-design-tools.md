@@ -128,4 +128,4 @@ Update `proxy/worker.ts` to forward the `tools` array in the Claude API request 
 6. Type "Delete the rectangle" → rectangle removed
 7. Verify all changes are real Figma nodes (can be selected, edited manually)
 
-## Status: NOT STARTED
+## Status: COMPLETE

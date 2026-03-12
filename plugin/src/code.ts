@@ -2,6 +2,9 @@
 // This file runs in Figma's plugin sandbox and has access to the Figma Plugin API.
 // It communicates with the UI iframe via figma.ui.postMessage / figma.ui.onmessage.
 
+import { getDocumentStructure, getNodeProperties, getSelection } from "./tools/read";
+import { createFrame, createText, createRectangle, updateNode, deleteNode, moveNode } from "./tools/write";
+
 figma.showUI(__html__, {
   width: 400,
   height: 600,
@@ -54,6 +57,58 @@ figma.ui.onmessage = async (msg: { type: string; payload?: unknown }) => {
       const payload = msg.payload as { message: string } | undefined;
       const text = payload && payload.message ? payload.message : "";
       figma.notify(text);
+      break;
+    }
+
+    case "tool-call": {
+      var payload = msg.payload as { callId: string; toolName: string; args: any };
+      var callId = payload.callId;
+      var toolName = payload.toolName;
+      var toolArgs = payload.args;
+
+      (async function () {
+        try {
+          var result: unknown;
+          switch (toolName) {
+            case "get_document_structure":
+              result = getDocumentStructure();
+              break;
+            case "get_node_properties":
+              result = getNodeProperties(toolArgs);
+              break;
+            case "get_selection":
+              result = getSelection();
+              break;
+            case "create_frame":
+              result = await createFrame(toolArgs);
+              break;
+            case "create_text":
+              result = await createText(toolArgs);
+              break;
+            case "create_rectangle":
+              result = await createRectangle(toolArgs);
+              break;
+            case "update_node":
+              result = await updateNode(toolArgs);
+              break;
+            case "delete_node":
+              result = deleteNode(toolArgs);
+              break;
+            case "move_node":
+              result = moveNode(toolArgs);
+              break;
+            default:
+              result = { error: "Unknown tool: " + toolName };
+          }
+          figma.ui.postMessage({ type: "tool-result", callId: callId, result: result });
+        } catch (err) {
+          figma.ui.postMessage({
+            type: "tool-result",
+            callId: callId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      })();
       break;
     }
 
