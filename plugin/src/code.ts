@@ -29,7 +29,8 @@ figma.ui.onmessage = async (msg: { type: string; payload?: unknown }) => {
     }
 
     case "notify": {
-      const text = (msg.payload as { message: string })?.message ?? "";
+      const payload = msg.payload as { message: string } | undefined;
+      const text = payload && payload.message ? payload.message : "";
       figma.notify(text);
       break;
     }

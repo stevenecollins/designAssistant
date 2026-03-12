@@ -41,7 +41,7 @@ async function build() {
     entryPoints: ["src/code.ts"],
     bundle: true,
     outfile: "dist/code.js",
-    target: "es2020",
+    target: "es2017",
     format: "iife",
     logLevel: "info",
   };

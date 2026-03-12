@@ -25,7 +25,8 @@
         break;
       }
       case "notify": {
-        const text = msg.payload?.message ?? "";
+        const payload = msg.payload;
+        const text = payload && payload.message ? payload.message : "";
         figma.notify(text);
         break;
       }
