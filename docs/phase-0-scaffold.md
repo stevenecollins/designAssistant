@@ -28,4 +28,9 @@ Set up the project directory structure, config files, and build tooling so that 
 3. Open Figma → Plugins → Development → Import plugin from manifest → select `plugin/manifest.json`
 4. Run the plugin — should show a panel with "Plugin loaded" text
 
-## Status: IN PROGRESS
+## Status: COMPLETE
+
+## Notes
+- Figma sandbox doesn't support `?.` and `??` syntax — use explicit null checks and keep esbuild sandbox target at `es2017`
+- UI iframe target can stay at `es2020` (runs in a modern browser context)
+- React bundle is ~1MB unminified — acceptable for dev, add minification in Phase 4
